@@ -40,9 +40,36 @@ MICROSECONDS_PER_MINUTE = 60 * 1_000_000
 MAX_DAYS_TO_EXPIRY = 25
 MAX_MICROSECONDS_TO_EXPIRY = MAX_DAYS_TO_EXPIRY * 24 * 3600 * 1_000_000
 
+# Sign/definition-based bounds for greeks on CALL options. These are theoretical
+# invariants (not data-fitted percentiles), so they hold across any time period
+# and only ever reject genuinely corrupted greeks. On BTC_2025-01 they remove 0
+# rows; they exist as a guardrail for future data pulls.
+#   (min, max), with None meaning unbounded on that side.
+GREEK_BOUNDS = {
+    "delta": (0.0, 1.0),   # call delta in [0, 1]
+    "gamma": (0.0, None),  # gamma >= 0
+    "vega":  (0.0, None),  # vega >= 0
+    "theta": (None, 0.0),  # theta <= 0 for long options
+    "rho":   (0.0, None),  # call rho >= 0
+}
+
+
+def greek_bound_clauses() -> list[str]:
+    """SQL predicates asserting every greek (mean and last) is within GREEK_BOUNDS."""
+    clauses = []
+    for greek, (lo, hi) in GREEK_BOUNDS.items():
+        for suffix in ("mean", "last"):
+            col = f"{greek}_{suffix}"
+            if lo is not None:
+                clauses.append(f"{col} >= {lo}")
+            if hi is not None:
+                clauses.append(f"{col} <= {hi}")
+    return clauses
+
 
 def build_query(source: str, limit: int | None) -> str:
     not_null_clause = " AND ".join(f"{col} IS NOT NULL" for col in REQUIRED_NOT_NULL_COLS)
+    greek_clause = " AND ".join(greek_bound_clauses())
     limit_clause = f"LIMIT {limit}" if limit is not None else ""
 
     return f"""
@@ -60,6 +87,7 @@ def build_query(source: str, limit: int | None) -> str:
           AND (expiration - minute_timestamp * {MICROSECONDS_PER_MINUTE})
               BETWEEN 0 AND {MAX_MICROSECONDS_TO_EXPIRY}
           AND type = 'call'
+          AND {greek_clause}
     )
     SELECT DISTINCT * FROM spread_and_expiry_filtered
     """
