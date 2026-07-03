@@ -2,3 +2,4 @@ scribble**
 __pycache__/
 **.parquet
 Calais_Options_Interview_Project_Bilingual.pdf
+data/
