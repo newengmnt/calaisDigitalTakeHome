@@ -59,6 +59,7 @@ def build_query(source: str, limit: int | None) -> str:
           AND bid_price_mean < ask_price_mean
           AND (expiration - minute_timestamp * {MICROSECONDS_PER_MINUTE})
               BETWEEN 0 AND {MAX_MICROSECONDS_TO_EXPIRY}
+          AND type = 'call'
     )
     SELECT DISTINCT * FROM spread_and_expiry_filtered
     """
