@@ -16,20 +16,14 @@ import numpy as np
 import pandas as pd
 
 from common import MICROSECONDS_PER_MINUTE, build_symbol_series, build_spot_series, asof_value
+from pnl import call_intrinsic, short_call_gross_pnl, short_call_net_pnl
+from greeks import position_delta, target_hedge_position
+from execution import option_fee, hedge_fee, round_to_lot
 
-OPTION_FEE_RATE     = 0.0005
-HEDGE_FEE_RATE      = 0.0004
 MIN_SCORE           = 0.0
 HEDGE_THRESHOLD     = 0.02      # BTC delta band before rebalancing
 MAX_OPEN_POSITIONS  = 5
 OPTION_LOT_SIZE     = 1.0
-UNDERLYING_LOT_SIZE = 0.001
-
-
-def round_to_lot(size: float, lot: float = UNDERLYING_LOT_SIZE) -> float:
-    """Nearest-multiple, not ceiling -- rounding up every trade would
-    systematically over-hedge across thousands of rebalances."""
-    return np.round(size / lot) * lot
 
 
 @dataclass
@@ -118,9 +112,9 @@ def generate_trades(cand: pd.DataFrame):
             # (already-USD) intrinsic settlement value and to hedge PnL/fees,
             # which the spec's own formula (size*spot*rate) treats as USD.
             entry_premium_usd = pos.entry_premium * pos.entry_spot
-            settle_price_usd = max(spot - pos.strike, 0.0)
-            entry_fee = size * entry_premium_usd * OPTION_FEE_RATE
-            gross = size * (entry_premium_usd - settle_price_usd)
+            settle_price_usd = call_intrinsic(spot, pos.strike)
+            entry_fee = option_fee(entry_premium_usd, size)
+            gross = short_call_gross_pnl(entry_premium_usd, settle_price_usd, size)
             trades.append(dict(
                 entry_time=pos.entry_time, exit_time=m,
                 symbol=pos.symbol, symbol_id=pos.symbol_id,
@@ -133,7 +127,7 @@ def generate_trades(cand: pd.DataFrame):
                 exit_execution_price=settle_price_usd / spot if spot > 0 else 0.0,  # BTC-equivalent intrinsic
                 quantity=pos.qty, side="sell",
                 option_entry_fee=entry_fee, option_exit_fee=0.0,
-                option_gross_pnl=gross, option_net_pnl=gross - entry_fee,   # USD
+                option_gross_pnl=gross, option_net_pnl=short_call_net_pnl(gross, entry_fee),   # USD
                 exit_reason="expiry_settlement",
             ))
 
@@ -160,15 +154,15 @@ def generate_trades(cand: pd.DataFrame):
         net_delta = 0.0
         for sid, pos in open_positions.items():
             d = asof_value(symbol_series[sid], m, "delta")
-            net_delta += pos.qty * d
+            net_delta += position_delta(pos.qty, d)
 
         # 4. Threshold-based hedge rebalance, rounded to the tradable lot.
-        target_hedge = -net_delta
+        target_hedge = target_hedge_position(net_delta)
         raw_trade_size = target_hedge - hedge_units
         if abs(raw_trade_size) > HEDGE_THRESHOLD:
             trade_size = round_to_lot(raw_trade_size)
             if trade_size != 0.0:
-                fee = abs(trade_size) * spot * HEDGE_FEE_RATE
+                fee = hedge_fee(trade_size, spot)
                 hedge_trades.append(dict(
                     timestamp=m, spot_price=spot,
                     previous_hedge_position=hedge_units,
