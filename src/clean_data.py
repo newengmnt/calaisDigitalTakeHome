@@ -38,7 +38,7 @@ REQUIRED_NOT_NULL_COLS = [
 
 MICROSECONDS_PER_MINUTE = 60 * 1_000_000
 MAX_DAYS_TO_EXPIRY = 25
-MAX_MICROSECONDS_TO_EXPIRY = MAX_DAYS_TO_EXPIRY * 24 * 3600 * 1_000_000
+MAX_MICROSECONDS_TO_EXPIRY = MAX_DAYS_TO_EXPIRY * 3 * 3600 * 1_000_000
 
 # Sign/definition-based bounds for greeks on CALL options. These are theoretical
 # invariants (not data-fitted percentiles), so they hold across any time period
