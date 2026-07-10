@@ -1,0 +1,13 @@
+{
+  "generated_at_utc": "2026-07-10T05:23:25.138356+00:00",
+  "candidates_file": "data/candidates.parquet",
+  "preprocessing_skipped": true,
+  "initial_capital": 1000000.0,
+  "hedge_threshold": 0.5,
+  "max_open_positions": 5,
+  "option_lot_size": 1.0,
+  "min_score": 0.5,
+  "underlying_lot_size": 0.001,
+  "output_level": "standard",
+  "unit_tests_run": false
+}
