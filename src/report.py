@@ -68,13 +68,13 @@ def to_datetime_col(minute_col: pd.Series) -> pd.Series:
     return pd.to_datetime(minute_col.astype("int64"), unit="m", utc=True)
 
 
-def load_inputs(snapshot_path: str, trades_path: str, hedge_trades_path: str,
-                 candidates_path: str):
-    snapshot = pd.read_csv(snapshot_path).sort_values("minute_timestamp").reset_index(drop=True)
-    trades = pd.read_csv(trades_path)
-    hedge_trades = pd.read_csv(hedge_trades_path)
-    cand = pd.read_parquet(candidates_path)
-
+def enrich_inputs(snapshot: pd.DataFrame, trades: pd.DataFrame, hedge_trades: pd.DataFrame,
+                   cand: pd.DataFrame):
+    """Add spot/datetime columns to already-loaded (in-memory) frames -- the
+    part of load_inputs that doesn't require touching disk, so callers that
+    already have the DataFrames (e.g. main.py's minimal-output path) don't
+    need to round-trip through CSV files just to get here."""
+    snapshot = snapshot.sort_values("minute_timestamp").reset_index(drop=True)
     unique_minutes = snapshot["minute_timestamp"].to_numpy()
     snapshot["spot"] = build_spot_series(cand, unique_minutes)
     snapshot["datetime"] = to_datetime_col(snapshot["minute_timestamp"])
@@ -87,6 +87,15 @@ def load_inputs(snapshot_path: str, trades_path: str, hedge_trades_path: str,
         hedge_trades["datetime"] = to_datetime_col(hedge_trades["timestamp"])
 
     return snapshot, trades, hedge_trades
+
+
+def load_inputs(snapshot_path: str, trades_path: str, hedge_trades_path: str,
+                 candidates_path: str):
+    snapshot = pd.read_csv(snapshot_path)
+    trades = pd.read_csv(trades_path)
+    hedge_trades = pd.read_csv(hedge_trades_path)
+    cand = pd.read_parquet(candidates_path)
+    return enrich_inputs(snapshot, trades, hedge_trades, cand)
 
 
 # ---------------------------------------------------------------------------

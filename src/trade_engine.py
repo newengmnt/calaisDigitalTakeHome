@@ -18,7 +18,7 @@ import pandas as pd
 from common import MICROSECONDS_PER_MINUTE, build_symbol_series, build_spot_series, asof_value
 from pnl import call_intrinsic, short_call_gross_pnl, short_call_net_pnl
 from greeks import position_delta, target_hedge_position
-from execution import option_fee, hedge_fee, round_to_lot
+from execution import option_fee, hedge_fee, round_to_lot, UNDERLYING_LOT_SIZE
 
 MIN_SCORE           = 0.0
 HEDGE_THRESHOLD     = 0.02      # BTC delta band before rebalancing
@@ -57,7 +57,12 @@ def compute_eligible_mask(cand: pd.DataFrame, last_minute: int) -> np.ndarray:
     return (cand["expiration"] <= last_minute_us).to_numpy()
 
 
-def generate_trades(cand: pd.DataFrame):
+def generate_trades(cand: pd.DataFrame, *,
+                     hedge_threshold: float = HEDGE_THRESHOLD,
+                     max_open_positions: int = MAX_OPEN_POSITIONS,
+                     option_lot_size: float = OPTION_LOT_SIZE,
+                     min_score: float = MIN_SCORE,
+                     underlying_lot_size: float = UNDERLYING_LOT_SIZE):
     cand = cand.sort_values(["minute_timestamp", "symbol_id"]).reset_index(drop=True)
     unique_minutes = np.unique(cand["minute_timestamp"].to_numpy())
     last_minute = unique_minutes.max()
@@ -133,9 +138,9 @@ def generate_trades(cand: pd.DataFrame):
 
         # 2. Entry -- at most one new position per minute: the single best
         #    eligible candidate, skipped if its symbol is already held.
-        if len(open_positions) < MAX_OPEN_POSITIONS:
+        if len(open_positions) < max_open_positions:
             row = best_idx_by_minute.get(m)
-            if row is not None and scored[row] >= MIN_SCORE:
+            if row is not None and scored[row] >= min_score:
                 sid = symbol_id[row]
                 if sid not in open_positions:
                     open_positions[sid] = Position(
@@ -146,7 +151,7 @@ def generate_trades(cand: pd.DataFrame):
                         entry_delta=delta[row],
                         entry_gamma=gamma[row], entry_vega=vega[row],
                         entry_theta=theta[row], entry_bid=bid[row],
-                        entry_ask=ask[row], qty=-OPTION_LOT_SIZE,
+                        entry_ask=ask[row], qty=-option_lot_size,
                     )
 
         # 3. Net delta -- asof lookup per open position (handles gaps; no
@@ -159,8 +164,8 @@ def generate_trades(cand: pd.DataFrame):
         # 4. Threshold-based hedge rebalance, rounded to the tradable lot.
         target_hedge = target_hedge_position(net_delta)
         raw_trade_size = target_hedge - hedge_units
-        if abs(raw_trade_size) > HEDGE_THRESHOLD:
-            trade_size = round_to_lot(raw_trade_size)
+        if abs(raw_trade_size) > hedge_threshold:
+            trade_size = round_to_lot(raw_trade_size, lot=underlying_lot_size)
             if trade_size != 0.0:
                 fee = hedge_fee(trade_size, spot)
                 hedge_trades.append(dict(
@@ -182,10 +187,20 @@ if __name__ == "__main__":
     parser.add_argument("--candidates", default="./data/candidates.parquet")
     parser.add_argument("--trades-output", default="./outputs/trades.csv")
     parser.add_argument("--hedge-trades-output", default="./outputs/hedge_trades.csv")
+    parser.add_argument("--hedge-threshold", type=float, default=HEDGE_THRESHOLD)
+    parser.add_argument("--max-open-positions", type=int, default=MAX_OPEN_POSITIONS)
+    parser.add_argument("--option-lot-size", type=float, default=OPTION_LOT_SIZE)
+    parser.add_argument("--min-score", type=float, default=MIN_SCORE)
+    parser.add_argument("--underlying-lot-size", type=float, default=UNDERLYING_LOT_SIZE)
     args = parser.parse_args()
 
     cand = pd.read_parquet(args.candidates)
-    trades_df, hedge_trades_df = generate_trades(cand)
+    trades_df, hedge_trades_df = generate_trades(
+        cand, hedge_threshold=args.hedge_threshold,
+        max_open_positions=args.max_open_positions,
+        option_lot_size=args.option_lot_size, min_score=args.min_score,
+        underlying_lot_size=args.underlying_lot_size,
+    )
 
     trades_df.to_csv(args.trades_output, index=False)
     hedge_trades_df.to_csv(args.hedge_trades_output, index=False)
