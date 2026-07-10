@@ -1,0 +1,25 @@
+{
+  "total_return": -0.048564394728676685,
+  "annualized_return": -0.443538824010952,
+  "max_drawdown": -0.048110084137643616,
+  "sharpe": -13.912187289896979,
+  "calmar": -9.219248562151364,
+  "num_option_trades": 127,
+  "num_hedge_trades": 19006,
+  "win_rate": 0.47244094488188976,
+  "worst_day_pnl": -7257.38128481766,
+  "best_day_pnl": 3086.704017376672,
+  "total_option_fees": 69.34217705458,
+  "total_hedge_fees": 45078.771156881965,
+  "average_relative_spread": 0.07751279551980643,
+  "max_abs_net_delta_before_hedge": 4.9959,
+  "max_abs_net_delta_after_hedge": 0.019999999999996,
+  "max_abs_gamma": 0.00406,
+  "max_abs_vega": 168.92991,
+  "average_theta": 1281.0459950163574,
+  "data_quality_warnings": [
+    "385 duplicate (minute, symbol) rows removed during preprocessing (sub-tick snapshot artifacts, not exact duplicates).",
+    "19006 hedge trades vs 127 option trades (150x) -- hedge threshold may be too tight relative to position size.",
+    "Option prices in the source data are BTC-quoted; PnL is converted to USD using spot at the time of each cash flow. Greek-PnL decomposition's vega/IV component is a residual (no portfolio IV series persisted) and also absorbs the settlement-minute gap between last quoted ask and actual intrinsic value at expiry."
+  ]
+}
